@@ -314,6 +314,20 @@ game = st.sidebar.selectbox("Game", list(GSHEET_URLS.keys()))
 df_raw = load_csv_from_url(GSHEET_URLS[game])
 df = add_time_features(df_raw)
 
+# ---------- Show latest draw dates for all games ----------
+latest_dates = {}
+for g_name, url in GSHEET_URLS.items():
+    df_game = add_time_features(load_csv_from_url(url))
+    if "DrawDate" in df_game.columns and not df_game["DrawDate"].isna().all():
+        latest_dates[g_name] = df_game["DrawDate"].max().strftime("%Y-%m-%d")
+    else:
+        latest_dates[g_name] = "N/A"
+
+st.sidebar.markdown("### Latest Draw Dates")
+for g, d in latest_dates.items():
+    st.sidebar.write(f"**{g}:** {d}")
+
+
 # Year slider (safe defaults)
 if "Year" in df.columns and not df["Year"].isna().all():
     min_y, max_y = int(df["Year"].min()), int(df["Year"].max())
