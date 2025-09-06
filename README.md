@@ -1,35 +1,31 @@
-# totosupremeprediction
-Predict Toto Star, Power and Supreme numbers
+# Toto Predictor — Enhanced with LSTM, Global Filters, Pages
 
-# Toto Predictor — Enhanced Lottery Prediction App
+A **Streamlit web app** for Malaysian lottery number analysis and prediction.  
+Includes statistical analysis, ML models, LSTM predictions (if TensorFlow is installed), Markov chains, and hybrid strategies.
 
-A Streamlit-based Toto/lottery number predictor with multiple prediction methods and analysis features.
+---
 
 ## Features
+- Import historical draws from Google Sheets for **Star 6/50**, **Power 6/55**, and **Supreme 6/58**.
+- **Analysis**: frequency, hot/cold numbers, pairs/triples, gap analysis, co-occurrence heatmaps, yearly/monthly/weekday trends, clustering.
+- **Prediction**:
+  - Hot/Cold
+  - Monte Carlo
+  - Logistic Regression ML
+  - Optional LSTM
+  - Hybrid (Frequency + ML)
+  - Markov Chain (order 1,2,3)
+- **Simulation/Backtesting**: test strategies against historical draws.
+- Download filtered data, backtest results, or Markov summaries as CSV.
 
-- **Games supported**: Star 6/50, Power 6/55, Supreme 6/58
-- **Prediction methods**:
-  - **Hot Numbers**: Picks frequently drawn numbers
-  - **Cold Numbers**: Picks least frequently drawn numbers
-  - **Monte Carlo**: Simulates random draws with frequency weighting
-  - **ML Logistic Regression**: Predicts numbers based on historical draws
-  - **LSTM (optional)**: Sequence-based deep learning prediction
-  - **Hybrid (Freq + ML)**: Combines frequency and ML scores
-  - **Markov Chain**: Predicts numbers based on previous draw patterns
-- **Analysis tools**:
-  - Number frequency, pairs, triples
-  - Gap analysis
-  - Co-occurrence heatmap
-  - Yearly, monthly, weekday trends
-  - Clustering (KMeans)
-- **Simulation/backtesting**: Evaluate strategies on historical draws
-- **Global filters**: Filter by year range, month, or weekday
-- **Data export**: Download filtered draws or backtest results
+---
 
 ## Installation
-
-1. Clone the repository:
 
 ```bash
 git clone https://github.com/yourusername/toto-predictor.git
 cd toto-predictor
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+pip install -r requirements.txt
