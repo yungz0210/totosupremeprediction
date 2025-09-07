@@ -35,6 +35,9 @@ GSHEET_URLS = {
 }
 
 # ---------- Auto-refresh helpers ----------
+if 'refresh' not in st.session_state:
+    st.session_state['refresh'] = False
+
 def clear_cache():
     try:
         st.cache_data.clear()
@@ -42,8 +45,14 @@ def clear_cache():
         pass
 
 if st.sidebar.button("🔄 Refresh Data"):
-    clear_cache()
-    st.experimental_rerun()
+    st.spinner("Refreshing data... please wait.")
+    try:
+        st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Cache clear failed: {e}")
+    # trigger rerun by updating session_state
+    st.session_state['refresh'] = not st.session_state.get('refresh', False)
+
 
 # ---------- Utils ----------
 @st.cache_data(ttl=300)
@@ -370,6 +379,8 @@ if not draws_list:
     st.stop()
 
 # ---------- Pages ----------
+markov_order = 1
+
 if page == "Analysis":
     st.header("Analysis")
     st.write(f"Most recent draw: {list(map(int, draws_list[-1])) if draws_list else 'N/A'}")
@@ -409,16 +420,38 @@ if page == "Analysis":
     avg_gaps = {n: (np.mean(gaps_per_number[n]) if gaps_per_number[n] else np.nan) for n in range(1, max_num+1)}
     avg_gaps_series = pd.Series(avg_gaps).dropna().sort_values()
     st.dataframe(avg_gaps_series.rename("AvgGap").reset_index().rename(columns={"index":"Number"}).head(20))
-    all_gaps = []
-    for v in gaps_per_number.values():
-        all_gaps.extend(v)
-    if all_gaps:
-        st.bar_chart(pd.Series(all_gaps).value_counts().sort_index())
+
+    # Markov transition inspection
+    st.subheader("Inspect Markov transitions")
+    transitions_all = build_markov_transitions(draws_list, order=markov_order)
+    state_counts = [(s, sum(c.values())) for s, c in transitions_all.items()]
+    state_counts = sorted(state_counts, key=lambda x: x[1], reverse=True)
+    states_list = [s for s, _ in state_counts]
+    if states_list:
+        chosen_state = st.selectbox("Choose state to inspect", options=states_list, format_func=lambda x: str(x))
+        probs_counter = transitions_all.get(chosen_state, Counter())
+        prob_vec = np.zeros(max_num, dtype=float)
+        total = sum(probs_counter.values())
+        if total > 0:
+            for num, cnt in probs_counter.items():
+                if 1 <= num <= max_num:
+                    prob_vec[num-1] = cnt / total
+        fig, ax = plt.subplots(1,1, figsize=(10,3))
+        ax.bar(range(1, max_num+1), prob_vec)
+        ax.set_xlabel("Next number")
+        ax.set_ylabel("P(next|state)")
+        ax.set_title(f"Conditional probabilities for state {chosen_state}")
+        st.pyplot(fig)
+        fig2, ax2 = plt.subplots(1,1, figsize=(10,1.6))
+        sns.heatmap(prob_vec.reshape(1,-1), cmap="YlOrRd", cbar=True, ax=ax2)
+        ax2.set_yticks([])
+        ax2.set_xticks(np.arange(0, max_num, max(1, max_num//10)))
+        st.pyplot(fig2)
+    else:
+        st.info("No Markov states available to inspect (insufficient data).")
 
     # Co-occurrence heatmap
     st.subheader("Number Co-occurrence Heatmap")
-    import matplotlib.pyplot as plt
-    import seaborn as sns
     co_matrix = np.zeros((max_num, max_num), dtype=int)
     for d in draws_list:
         for i in range(len(d)):
@@ -430,17 +463,6 @@ if page == "Analysis":
     sns.heatmap(co_matrix, cmap="YlGnBu", ax=ax, cbar=True)
     ax.set_title("Number Co-occurrence")
     st.pyplot(fig)
-
-    # Yearly/monthly/weekday trends
-    st.subheader("Yearly Trends")
-    if "Year" in filtered_df.columns:
-        st.line_chart(filtered_df.groupby("Year").size())
-    st.subheader("Monthly Counts")
-    st.bar_chart(filtered_df.groupby("Month").size().reindex(range(1,13), fill_value=0))
-    st.subheader("Weekday Counts")
-    st.bar_chart(filtered_df.groupby("Weekday").size().reindex(
-        ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], fill_value=0
-    ))
 
     # Clustering
     st.subheader("Clustering (KMeans)")
@@ -474,39 +496,40 @@ elif page == "Prediction":
         markov_order = st.selectbox("Markov order (state size)", [1,2,3], index=0,
                                     help="Order=1: condition on single number; Order=2: pairs; Order=3: triples")
 
+
     # If Markov mode show transition inspection UI
-    if method == "Markov Chain":
-        st.subheader("Inspect Markov transitions")
-        transitions_all = build_markov_transitions(draws_list, order=markov_order)
+    #if method == "Markov Chain":
+    #    st.subheader("Inspect Markov transitions")
+    #    transitions_all = build_markov_transitions(draws_list, order=markov_order)
         # list available states, show top states by count
-        state_counts = [(s, sum(c.values())) for s, c in transitions_all.items()]
-        state_counts = sorted(state_counts, key=lambda x: x[1], reverse=True)
-        states_list = [s for s, _ in state_counts]
-        if states_list:
-            chosen_state = st.selectbox("Choose state to inspect", options=states_list, format_func=lambda x: str(x))
+    #    state_counts = [(s, sum(c.values())) for s, c in transitions_all.items()]
+    #    state_counts = sorted(state_counts, key=lambda x: x[1], reverse=True)
+    #    states_list = [s for s, _ in state_counts]
+    #    if states_list:
+    #        chosen_state = st.selectbox("Choose state to inspect", options=states_list, format_func=lambda x: str(x))
             # compute probability vector for next numbers
-            probs_counter = transitions_all.get(chosen_state, Counter())
-            prob_vec = np.zeros(max_num, dtype=float)
-            total = sum(probs_counter.values())
-            if total > 0:
-                for num, cnt in probs_counter.items():
-                    if 1 <= num <= max_num:
-                        prob_vec[num-1] = cnt / total
+    #        probs_counter = transitions_all.get(chosen_state, Counter())
+    #        prob_vec = np.zeros(max_num, dtype=float)
+    #        total = sum(probs_counter.values())
+    #        if total > 0:
+    #            for num, cnt in probs_counter.items():
+    #                if 1 <= num <= max_num:
+    #                    prob_vec[num-1] = cnt / total
             # plot bar chart & heatmap
-            fig, ax = plt.subplots(1,1, figsize=(10,3))
-            ax.bar(range(1, max_num+1), prob_vec)
-            ax.set_xlabel("Next number")
-            ax.set_ylabel("P(next|state)")
-            ax.set_title(f"Conditional probabilities for state {chosen_state}")
-            st.pyplot(fig)
+    #        fig, ax = plt.subplots(1,1, figsize=(10,3))
+    #        ax.bar(range(1, max_num+1), prob_vec)
+    #        ax.set_xlabel("Next number")
+    #        ax.set_ylabel("P(next|state)")
+    #        ax.set_title(f"Conditional probabilities for state {chosen_state}")
+    #        st.pyplot(fig)
             # small heatmap 1 x N
-            fig2, ax2 = plt.subplots(1,1, figsize=(10,1.6))
-            sns.heatmap(prob_vec.reshape(1,-1), cmap="YlOrRd", cbar=True, ax=ax2)
-            ax2.set_yticks([])
-            ax2.set_xticks(np.arange(0, max_num, max(1, max_num//10)))
-            st.pyplot(fig2)
-        else:
-            st.info("No Markov states available to inspect (insufficient data).")
+     #       fig2, ax2 = plt.subplots(1,1, figsize=(10,1.6))
+     #       sns.heatmap(prob_vec.reshape(1,-1), cmap="YlOrRd", cbar=True, ax=ax2)
+     #       ax2.set_yticks([])
+     #       ax2.set_xticks(np.arange(0, max_num, max(1, max_num//10)))
+     #       st.pyplot(fig2)
+     #   else:
+     #       st.info("No Markov states available to inspect (insufficient data).")
 
     if st.button("Generate"):
         suggestions = []
@@ -620,13 +643,24 @@ elif page == "Simulation":
         st.write("Average hits per draw (hot):", np.mean(hits_hot))
         st.line_chart(hits_hot)
 
-        # Monte Carlo backtest
+        # ---------- Monte Carlo backtest ----------
         st.subheader("Monte Carlo backtest")
+
+        # Run Monte Carlo suggestions
         mc_top = monte_carlo_suggest(freq, pick=6, n_sim=2000, top_k=3)
+
         for combo, cnt in mc_top:
-            hits = [len(set(combo) & set(d)) for d in test]
-            st.write(f"MC combo {list(combo)} — avg hits: {np.mean(hits):.2f}")
-            st.line_chart(hits)
+            # Ensure combo is Python ints
+            combo_py = [int(x) for x in combo]
+
+            # Calculate hits
+            hits = [len(set(combo_py) & set([int(x) for x in d])) for d in test]
+
+            # Display
+            st.write(f"MC combo {combo_py} — avg hits: {float(np.mean(hits)):.2f}")
+
+            # Streamlit line chart (requires float)
+            st.line_chart([float(h) for h in hits])
 
         # ML Logistic backtest
         st.subheader("ML Logistic backtest")
@@ -656,29 +690,63 @@ elif page == "Simulation":
             else:
                 st.info("Not enough sequences to train LSTM for backtest.")
 
-        # Markov orders backtest
+        # ---------- Markov Chain orders backtest ----------
         st.subheader("Markov Chain orders backtest (order 1,2,3)")
+
         markov_results = {}
-        for order in [1,2,3]:
+        test_py = [[int(x) for x in row] for row in test]  # ensure Python ints
+
+        for order in [1, 2, 3]:
             simulated_train = train.copy()
             hits = []
-            for i, actual in enumerate(test):
-                trans_now = build_markov_transitions(simulated_train, order=order)
-                pred = markov_chain_predict_from_transitions(trans_now, simulated_train[-1], max_num, pick=6)
-                hits.append(len(set(pred) & set(actual)))
-                simulated_train = simulated_train + [actual]
-            markov_results[order] = hits
-            st.write(f"Order {order} — avg hits: {np.mean(hits):.2f}")
-            st.line_chart(hits)
 
+            st.write(f"### Order {order} — first 3 draws")
+            
+            for i, actual in enumerate(test_py):
+                # Build transition matrix from current simulated_train
+                trans_now = build_markov_transitions(simulated_train, order=order)
+                
+                # Predict next numbers
+                pred = markov_chain_predict_from_transitions(
+                    trans_now, simulated_train[-1], max_num, pick=6
+                )
+                pred = [int(x) for x in pred]  # convert to Python int
+
+                # Count hits as Python int
+                hit_count = int(len(set(pred) & set(actual)))
+                hits.append(hit_count)
+
+                # Update simulated_train
+                simulated_train.append(actual)
+
+                # Display only first 3 draws
+                if i < 3:
+                    st.write(
+                        f"Draw {i+1}: Predicted {pred} — Actual {actual} — Hits {hit_count}"
+                    )
+
+            # Store results
+            markov_results[order] = hits
+
+            # Average hits
+            avg_hits = float(np.mean(hits))
+            st.write(f"Order {order} — avg hits: {avg_hits:.2f}")
+
+            # Line chart (convert hits to float for Streamlit)
+            st.line_chart([float(h) for h in hits])
+
+        # Summary table
         summary = pd.DataFrame({
             "Order": list(markov_results.keys()),
-            "AvgHits": [np.mean(v) for v in markov_results.values()]
+            "AvgHits": [float(np.mean(v)) for v in markov_results.values()]
         })
-        st.dataframe(summary)
 
-        # Download summary CSV
-        csv_bytes = df_to_csv_bytes(summary)
-        st.download_button("Download Markov summary CSV", data=csv_bytes, file_name="markov_summary.csv", mime="text/csv")
+        st.dataframe(summary)
+        st.download_button(
+            "Download Markov summary CSV",
+            data=df_to_csv_bytes(summary),
+            file_name="markov_summary.csv",
+            mime="text/csv"
+        )
 
 st.caption("Reminder: lottery draws are random. These are statistical tools and do NOT guarantee winning numbers.")
